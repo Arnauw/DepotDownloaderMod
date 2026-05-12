@@ -25,10 +25,16 @@ init()
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 lock = asyncio.Lock()
-client = httpx.AsyncClient(trust_env=True, verify=False)
+client = httpx.AsyncClient(trust_env=True, verify=True)
 
-DEPOTDOWNLOADER = "DepotDownloadermod.exe"
+DEPOTDOWNLOADER = "DepotDownloadermod.exe" if sys.platform == "win32" else "./DepotDownloadermod"
 DEPOTDOWNLOADER_ARGS = "-max-downloads 256 -verify-all"
+
+def pause():
+    if sys.platform == "win32":
+        pause()
+    else:
+        input("Press Enter to continue...")
 
 DEFAULT_CONFIG = {
     "Github_Personal_Token": "",
@@ -115,7 +121,7 @@ async def load_config():
     """ 加载配置文件 """
     if not os.path.exists('./config.json'):
         await gen_config_file()
-        os.system('pause')
+        pause()
         sys.exit()
 
     try:
@@ -128,7 +134,7 @@ async def load_config():
         log.error(f"配置文件加载失败，原因: {stack_error(e)},重置配置文件中...")
         os.remove("./config.json")
         await gen_config_file()
-        os.system('pause')
+        pause()
         sys.exit()
 
 config = asyncio.run(load_config())
@@ -362,13 +368,20 @@ async def get_data_local(app_id: str) -> list:
 
 async def depotdownloadermod_add(app_id: str, manifests: list) -> bool:
     async with lock:
-        log.info(f'DepotDownloader 下载文件生成: {app_id}.bat')
+        is_windows = sys.platform == "win32"
+        ext = "bat" if is_windows else "sh"
+        script_path = f'{app_id}.{ext}'
+        log.info(f'DepotDownloader 下载文件生成: {script_path}')
         try:
-            async with aiofiles.open(f'{app_id}.bat', mode="w", encoding="utf-8") as bat_file:
+            async with aiofiles.open(script_path, mode="w", encoding="utf-8") as bat_file:
+                if not is_windows:
+                    await bat_file.write('#!/bin/sh\n')
                 for manifest in manifests:
                     depot_id = manifest[0:manifest.find('_')]
                     manifest_id = manifest[manifest.find('_') + 1:manifest.find('.')]
                     await bat_file.write(f'{DEPOTDOWNLOADER} -app {app_id} -depot {depot_id} -manifest {manifest_id} -manifestfile {manifest} -depotkeys {app_id}.key {DEPOTDOWNLOADER_ARGS}\n')
+            if not is_windows:
+                os.chmod(script_path, 0o755)
         except Exception as e:
             log.error(f'出现错误: {e}')
             return False
@@ -377,19 +390,6 @@ async def fetch_info(url, headers) -> str | None:
     try:
         r = await client.get(url, headers=headers)
         return r.json()
-    except KeyboardInterrupt:
-        log.info("程序已退出")
-    except Exception as e:
-        log.error(f'获取信息失败: {stack_error(e)}')
-        return None
-    except httpx.ConnectTimeout as e:
-        log.error(f'获取信息时超时: {stack_error(e)}')
-        return None
-    
-async def get_pro_token():
-    try:
-        r = await client.get("https://gitee.com/pjy612/sai/raw/master/free")
-        return csharp_gzip(r.text)
     except KeyboardInterrupt:
         log.info("程序已退出")
     except Exception as e:
@@ -581,7 +581,7 @@ async def main(app_id: str, repos: list) -> bool:
                 # log.info(f'清单最后更新时间: {latest_date}')
                 log.info(f'导入成功: {app_id}')
                 await client.aclose()
-                os.system('pause')
+                pause()
                 return True
             elif selected_repo == 'PrintedWaste':
                 if(await printedwaste_download(app_id)):
@@ -591,7 +591,7 @@ async def main(app_id: str, repos: list) -> bool:
                     # log.info(f'清单最后更新时间: {latest_date}')
                     log.info(f'导入成功: {app_id}')
                     await client.aclose()
-                    os.system('pause')
+                    pause()
                     return True
             elif selected_repo == 'steambox.gdata.fun':
                 if(await gdata_download(app_id)):
@@ -601,7 +601,7 @@ async def main(app_id: str, repos: list) -> bool:
                     # log.info(f'清单最后更新时间: {latest_date}')
                     log.info(f'导入成功: {app_id}')
                     await client.aclose()
-                    os.system('pause')
+                    pause()
                     return True
             elif selected_repo == 'cysaw.top':
                 if(await cysaw_download(app_id)):
@@ -611,7 +611,7 @@ async def main(app_id: str, repos: list) -> bool:
                     # log.info(f'清单最后更新时间: {latest_date}')
                     log.info(f'导入成功: {app_id}')
                     await client.aclose()
-                    os.system('pause')
+                    pause()
                     return True
             elif selected_repo == 'luckygametools/steam-cfg': 
                 await checkcn()
@@ -626,7 +626,7 @@ async def main(app_id: str, repos: list) -> bool:
                     # log.info(f'清单最后更新时间: {latest_date}')
                     log.info(f'导入成功: {app_id}')
                     await client.aclose()
-                    os.system('pause')
+                    pause()
                     return True
             else:
                 await checkcn()
@@ -646,7 +646,7 @@ async def main(app_id: str, repos: list) -> bool:
                         # log.info(f'清单最后更新时间: {latest_date}')
                         log.info(f'导入成功: {app_id}')
                         await client.aclose()
-                        os.system('pause')
+                        pause()
                         return True
         except Exception as e:
             log.error(f'处理失败: {stack_error(e)}')
